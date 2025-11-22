@@ -1,0 +1,68 @@
+
+import gradio as gr
+import speech_recognition as sr
+from transformers import pipeline
+
+# ----------------------------
+# Initialize emotion detection pipeline
+# Using latest Hugging Face API (top_k=None instead of deprecated return_all_scores)
+# ----------------------------
+emotion_classifier = pipeline(
+    "text-classification",
+    model="j-hartmann/emotion-english-distilroberta-base",
+    top_k=None  # returns all emotion scores
+)
+
+# ----------------------------
+# Function to convert audio file to text
+# ----------------------------
+def transcribe_audio(audio_file):
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(audio_file) as source:
+        audio_data = recognizer.record(source)
+        try:
+            text = recognizer.recognize_google(audio_data)
+        except sr.UnknownValueError:
+            text = "Could not understand audio"
+        except sr.RequestError:
+            text = "API error"
+    return text
+
+# ----------------------------
+# Function to analyze emotion from text
+# ----------------------------
+def analyze_emotion(text):
+    results = emotion_classifier(text)[0]  # Hugging Face pipeline returns list of dicts
+    emotions = {item['label']: round(item['score'], 2) for item in results}
+    return emotions
+
+# ----------------------------
+# Main function for Gradio app
+# ----------------------------
+def process_input(text_input, audio_input):
+    # If audio is provided, use it
+    if audio_input is not None:
+        text_input = transcribe_audio(audio_input)
+    
+    emotions = analyze_emotion(text_input)
+    
+    return text_input, emotions
+
+# ----------------------------
+# Gradio Interface
+# ----------------------------
+iface = gr.Interface(
+    fn=process_input,
+    inputs=[
+        gr.Textbox(label="Type your text here"),
+        gr.Audio(label="Or upload your voice", type="filepath")  # Corrected for latest Gradio
+    ],
+    outputs=[
+        gr.Textbox(label="Transcribed Text"),
+        gr.JSON(label="Detected Emotions")
+    ],
+    title="Voice/Text Input with Emotion Analysis",
+    description="Upload your voice or type text, and the system will detect emotions from your input."
+)
+
+iface.launch()
